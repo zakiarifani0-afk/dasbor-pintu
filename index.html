@@ -95,7 +95,7 @@
             font-family: 'Orbitron', monospace;
             font-size: 3.5rem;
             font-weight: 700;
-            color: #fbbf24; /* Kuning Amber */
+            color: #fbbf24;
             text-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
         }
 
@@ -121,7 +121,6 @@
             margin-top: 15px;
         }
 
-        /* Styling Log Aktivitas */
         .log-section {
             width: 100%;
             max-width: 900px;
@@ -179,19 +178,16 @@
     </div>
 
     <div class="dashboard-grid">
-        <!-- Card Biner -->
         <div class="card">
             <div class="card-title">KODE BINER INPUT</div>
             <div id="kode-val" class="binary-display">-----</div>
         </div>
 
-        <!-- Card Desimal (FITUR BARU) -->
         <div class="card">
             <div class="card-title">NILAI DESIMAL</div>
             <div id="decimal-val" class="decimal-display">--</div>
         </div>
 
-        <!-- Card Status Pintu -->
         <div class="card" id="status-card">
             <div class="card-title">STATUS PINTU</div>
             <div id="status-val" class="status-display">Memuat...</div>
@@ -199,7 +195,6 @@
         </div>
     </div>
 
-    <!-- Log Aktivitas (FITUR BARU) -->
     <div class="log-section">
         <h3>Log Aktivitas Sistem</h3>
         <ul class="log-list" id="log-list">
@@ -211,7 +206,9 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // GANTI DENGAN KREDENSIAL FIREBASE ANDA
+        // =========================================================================
+        // PASTIKAN ANDA MENGISI KEMBALI DATA INI DENGAN KREDENSIAL FIREBASE ANDA
+        // =========================================================================
         const firebaseConfig = {
             apiKey: "ISI_DENGAN_API_KEY_WEB_ANDA",
             authDomain: "biner-pintu-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -226,7 +223,6 @@
         const db = getDatabase(app);
         const pintuRef = ref(db, 'PintuKeamanan');
 
-        // Referensi DOM
         const kodeEl = document.getElementById('kode-val');
         const decimalEl = document.getElementById('decimal-val');
         const statusEl = document.getElementById('status-val');
@@ -236,60 +232,78 @@
 
         let statusPintuSebelumnya = null;
         let isFirstLoad = true;
+        
+        // Variabel untuk menyimpan selisih waktu laptop dengan waktu internet
+        let selisihWaktu = 0; 
 
-        // Fungsi Format Waktu
+        // Fungsi mengambil waktu akurat dari internet (WIB)
+        async function sinkronkanWaktuInternet() {
+            try {
+                const response = await fetch('https://worldtimeapi.org/api/timezone/Asia/Jakarta');
+                const data = await response.json();
+                const waktuInternet = new Date(data.datetime).getTime();
+                const waktuLaptop = Date.now();
+                // Hitung selisihnya
+                selisihWaktu = waktuInternet - waktuLaptop; 
+            } catch (error) {
+                console.log("Gagal sinkronisasi waktu, menggunakan waktu lokal.");
+            }
+        }
+        
+        // Jalankan sinkronisasi saat web pertama kali dimuat
+        sinkronkanWaktuInternet();
+
+        // Fungsi Format Waktu yang sudah kebal dari jam laptop salah
         function getWaktuSekarang() {
-            const now = new Date();
-            return now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            // Waktu saat ini (berdasarkan laptop) ditambah selisih waktu asli dari internet
+            const waktuAkurat = new Date(Date.now() + selisihWaktu);
+            return waktuAkurat.toLocaleTimeString('id-ID', { 
+                timeZone: 'Asia/Jakarta',
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            });
         }
 
-        // Fungsi Tambah Log
         function tambahLog(pesan, tipe) {
             if (isFirstLoad) {
-                logList.innerHTML = ''; // Hapus teks "menunggu aktivitas" saat event pertama
+                logList.innerHTML = ''; 
                 isFirstLoad = false;
             }
             
             const li = document.createElement('li');
+            // Menampilkan log dengan jam yang sudah 100% akurat
             li.innerHTML = `<span>${pesan}</span> <span class="log-time">[${getWaktuSekarang()}]</span>`;
             
             if (tipe === 'success') li.classList.add('log-success');
             if (tipe === 'fail') li.classList.add('log-fail');
             
-            // Tambahkan di urutan paling atas
             logList.insertBefore(li, logList.firstChild);
             
-            // Batasi maksimal 10 log agar tidak penuh
             if (logList.children.length > 10) {
                 logList.removeChild(logList.lastChild);
             }
         }
 
-        // Listener Realtime
         onValue(pintuRef, (snapshot) => {
             const data = snapshot.val();
             
             if (data) {
-                // 1. Update Biner
                 const binerInput = data.KodeInput;
                 kodeEl.innerText = binerInput;
 
-                // 2. Konversi Biner ke Desimal (Fitur Baru)
-                // Menggunakan fungsi parseInt bawaan Javascript (string, basis numerik)
                 const nilaiDesimal = parseInt(binerInput, 2);
                 decimalEl.innerText = nilaiDesimal;
 
-                // 3. Update Jam Terakhir (Fitur Baru)
+                // Memperbarui indikator update terakhir menggunakan jam yang akurat
                 lastUpdateEl.innerText = `Update terakhir: ${getWaktuSekarang()}`;
 
-                // 4. Update Status UI & Log (Fitur Baru)
                 const statusSekarang = data.StatusPintu;
 
                 if (statusSekarang === "Tertutup" || statusSekarang === "Tertutup (Kode Salah)") {
                     statusEl.innerHTML = `<span class="status-icon">🔒</span> TERTUTUP`;
                     statusCard.className = 'card is-closed';
                     
-                    // Catat ke Log jika status berubah
                     if (statusPintuSebelumnya === "Terbuka") {
                         tambahLog(`Pintu dikunci. Kode biner diubah ke: ${binerInput}`, 'fail');
                     }
@@ -297,13 +311,11 @@
                     statusEl.innerHTML = `<span class="status-icon">🔓</span> TERBUKA`;
                     statusCard.className = 'card is-open';
                     
-                    // Catat ke Log jika pintu baru saja terbuka
                     if (statusPintuSebelumnya !== "Terbuka") {
                         tambahLog(`Akses Diterima! Pintu terbuka (Desimal: ${nilaiDesimal})`, 'success');
                     }
                 }
                 
-                // Simpan status saat ini untuk pengecekan berikutnya
                 statusPintuSebelumnya = statusSekarang;
             }
         });
