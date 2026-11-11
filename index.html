@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Keamanan Pintu IoT</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Poppins:wght@300;500&display=swap');
+
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --color-closed: #ef4444; /* Merah */
+            --color-open: #10b981;   /* Hijau */
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Poppins', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            margin: 0;
+            background: -webkit-linear-gradient(#38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 800px;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            border: 1px solid #334155;
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Styling Kode Biner */
+        .binary-display {
+            font-family: 'Orbitron', monospace;
+            font-size: 3.5rem;
+            font-weight: 700;
+            letter-spacing: 10px;
+            color: #38bdf8;
+            text-shadow: 0 0 15px rgba(56, 189, 248, 0.5);
+        }
+
+        /* Styling Status Pintu */
+        .status-display {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            transition: color 0.3s ease;
+        }
+
+        .status-icon {
+            font-size: 3rem;
+        }
+
+        /* Kondisi Terbuka / Tertutup */
+        .is-closed .status-display { color: var(--color-closed); }
+        .is-closed { border-top: 4px solid var(--color-closed); }
+        
+        .is-open .status-display { color: var(--color-open); text-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+        .is-open { border-top: 4px solid var(--color-open); }
+
+        .loader {
+            font-size: 1rem;
+            color: var(--text-muted);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>SISTEM KEAMANAN</h1>
+        <p>Real-time Monitoring Biner Dashboard</p>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- Card Kode Input -->
+        <div class="card">
+            <div class="card-title">KODE BINER INPUT</div>
+            <div id="kode-val" class="binary-display loader">Memuat...</div>
+        </div>
+
+        <!-- Card Status Pintu -->
+        <div class="card" id="status-card">
+            <div class="card-title">STATUS PINTU</div>
+            <div id="status-val" class="status-display loader">Memuat...</div>
+        </div>
+    </div>
+
+    <!-- Firebase Modular SDK -->
+    <script type="module">
+        // 1. Import Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // 2. Konfigurasi Firebase Anda
+        // PENTING: Ganti nilai apiKey, projectId, dll dengan konfigurasi dari Firebase Console Anda (Web App Settings)
+        const firebaseConfig = {
+            apiKey: "ISI_DENGAN_API_KEY_WEB_ANDA",
+            authDomain: "biner-pintu-default-rtdb.asia-southeast1.firebasedatabase.app",
+            databaseURL: "https://biner-pintu-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "ISI_DENGAN_PROJECT_ID",
+            storageBucket: "ISI_DENGAN_STORAGE_BUCKET",
+            messagingSenderId: "ISI_DENGAN_MESSAGING_SENDER_ID",
+            appId: "ISI_DENGAN_APP_ID"
+        };
+
+        // 3. Inisialisasi Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // 4. Referensi DOM HTML
+        const kodeEl = document.getElementById('kode-val');
+        const statusEl = document.getElementById('status-val');
+        const statusCard = document.getElementById('status-card');
+
+        // 5. Listener Realtime Database
+        const pintuRef = ref(db, 'PintuKeamanan');
+
+        onValue(pintuRef, (snapshot) => {
+            const data = snapshot.val();
+            
+            if (data) {
+                // Update Teks Biner
+                kodeEl.classList.remove('loader');
+                kodeEl.innerText = data.KodeInput;
+
+                // Update Status & UI Pintu
+                statusEl.classList.remove('loader');
+                if (data.StatusPintu === "Tertutup" || data.StatusPintu === "Tertutup (Kode Salah)") {
+                    statusEl.innerHTML = `<span class="status-icon">🔒</span> TERTUTUP`;
+                    statusCard.className = 'card is-closed';
+                } else {
+                    statusEl.innerHTML = `<span class="status-icon">🔓</span> TERBUKA`;
+                    statusCard.className = 'card is-open';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
